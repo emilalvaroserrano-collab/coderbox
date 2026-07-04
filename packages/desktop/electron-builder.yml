@@ -25,7 +25,8 @@
     "icon": "public/icon.png"
   },
   "deb": {
-    "packageName": "eburon-codebox"
+    "packageName": "eburon-codebox",
+    "artifactName": "eburon-codebox-${version}_${arch}.deb"
   },
   "nsis": {
     "oneClick": false,

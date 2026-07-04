@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
+import { Pool } from 'pg'
 import { readFileSync, existsSync, writeFileSync } from 'fs'
 import { resolve } from 'path'
 
@@ -43,7 +45,9 @@ export function getDb(): PrismaClient {
     if (!process.env.DATABASE_URL) {
       process.env.DATABASE_URL = 'postgresql://eburon:eburon@localhost:5433/eburon'
     }
-    prisma = new PrismaClient()
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+    const adapter = new PrismaPg(pool)
+    prisma = new PrismaClient({ adapter })
   }
   return prisma
 }

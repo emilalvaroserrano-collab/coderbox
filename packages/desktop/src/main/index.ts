@@ -123,7 +123,11 @@ ipcMain.handle('db:user:findByFirebaseUid', async (_e, firebaseUid: string) => {
 
 ipcMain.handle('db:user:create', async (_e, data: { firebaseUid: string; email?: string; name?: string; avatarUrl?: string }) => {
   const db = getDb()
-  return db.user.create({ data })
+  return db.user.upsert({
+    where: { firebaseUid: data.firebaseUid },
+    update: { email: data.email, name: data.name, avatarUrl: data.avatarUrl },
+    create: data,
+  })
 })
 
 ipcMain.handle('db:user:update', async (_e, id: string, data: { name?: string; avatarUrl?: string; preferences?: any }) => {

@@ -14,6 +14,7 @@ import {
 const firebaseConfig = {
   apiKey: 'AIzaSyBpIVXx5V_hlBxVW01a6HrLV8QXmK-j2UI',
   authDomain: 'gen-lang-client-0005794941.firebaseapp.com',
+  databaseURL: 'https://gen-lang-client-0005794941-default-rtdb.firebaseio.com',
   projectId: 'gen-lang-client-0005794941',
   storageBucket: 'gen-lang-client-0005794941.firebasestorage.app',
   messagingSenderId: '723418668838',
