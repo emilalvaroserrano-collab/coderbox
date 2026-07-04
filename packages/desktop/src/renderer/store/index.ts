@@ -3,6 +3,7 @@ import { getSkillManager } from '@/lib/skills'
 import { getMemoryStore } from '@/lib/memory'
 import { executePrompt, streamPrompt, getAvailableProviders, getOnlineProviders } from '@/lib/providers/client'
 import { ProviderInfo, EBURON_ALIASES, EBURON_DISPLAY_NAMES } from '@/lib/providers/types'
+import { ALL_SKILLS } from '@/components/skills/skills-data'
 
 export interface Thread {
   id: string
@@ -31,6 +32,8 @@ export interface SkillDef {
   type: 'system' | 'custom'
   enabled: boolean
   icon: string
+  source: 'opencode' | 'claude' | 'codex' | 'hermes'
+  tags?: string[]
 }
 
 export interface ModelDef {
@@ -98,12 +101,7 @@ export const useStore = create<AppState>((set, get) => ({
   activeThreadId: null,
   threads: [],
   messages: {},
-  skills: [
-    { id: 'ast-indexer', name: 'AST Codebase Indexer', description: 'Automatically builds vector embeddings and semantic syntax trees across your local repository for ultra-fast code retrieval.', type: 'system', enabled: true, icon: 'Code2' },
-    { id: 'cve-scanner', name: 'CVE Security Scanner', description: 'Scans code modifications in real-time for SQL injections, XSS vulnerabilities, and outdated package dependencies.', type: 'system', enabled: true, icon: 'Shield' },
-    { id: 'react19-migrator', name: 'React 19 Action Migrator', description: 'Specialized refactoring rules converting legacy useEffect hooks and class components directly into React 19 Server Actions.', type: 'custom', enabled: true, icon: 'Layers' },
-    { id: 'figma-to-tailwind', name: 'Figma to Tailwind UI', description: 'Translates Figma JSON design tokens and layout hierarchies into accessible, responsive Tailwind CSS JSX structures.', type: 'custom', enabled: false, icon: 'PenTool' },
-  ],
+  skills: ALL_SKILLS.map((s) => ({ ...s })),
   models: EBURON_ALIASES.map((alias) => ({
     id: alias,
     name: EBURON_DISPLAY_NAMES[alias] || alias,
