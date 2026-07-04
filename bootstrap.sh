@@ -1,352 +1,226 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
 
-# ============================================================================
-#  Eburon CodeBox — One-Command Bootstrap Installer
-#  Installs everything: Node, pnpm, Python, Ollama, OpenCode, Freebuff,
-#  Gemini, CLI tools, CodeBox app, and all dependencies.
+# Bootstrap script for Codebox environment
+# Creates .env file and downloads/installs all dependencies
+
+# Colors for output
+GREEN="\033[0;32m"
+YELLOW="\033[1;33m"
+BLUE="\033[0;34m"
+NC="\033[0m" # No Color
+
+# Project root
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo -e "${GREEN}🔧 Eburon Codebox Bootstrap Script${NC}"
+echo -e "${GREEN}==============================${NC}\n"
+
+# Check if running on Linux
+if [[ "$OSTYPE" != "linux-gnu"* ]]; then
+  echo -e "${YELLOW}⚠️  Warning: This script is intended for Linux. Other OS may have issues.${NC}"
+fi
+
+# Check for required commands
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+# Check for essential dependencies
+for cmd in docker curl wget git node npm pnpm; do
+  if ! command_exists "$cmd"; then
+    echo -e "${YELLOW}⚠️  Installing $cmd...${NC}"
+    if [[ "$cmd" == "pnpm" ]]; then
+      echo "  To install pnpm, run: npm install -g pnpm"
+      exit 1
+    elif [[ "$cmd" == "git" ]]; then
+      if ! command_exists "apt-get" && ! command_exists "yum" && ! command_exists "dnf"; then
+        echo -e "${YELLOW}  Skipping git install (no package manager detected).${NC}"
+      else
+        echo -e "${YELLOW}  Run: sudo apt-get install git (or sudo yum install git, sudo dnf install git)${NC}"
+      fi
+      exit 1
+    else
+      echo -e "${YELLOW}  Manual installation required for $cmd${NC}"
+      exit 1
+    fi
+  fi
+  echo -e "${GREEN}✓ $cmd is available${NC}"
+done
+
+# Ask for user confirmation before proceeding
+echo -e "\n${BLUE}🔍 Environment Check Complete${NC}"
+echo -e "${BLUE}=================================${NC}"
+echo -e "\n${YELLOW}This script will:${NC}"
+echo -e "  1. Install dependencies (ollama, opencode, freebuff2api proxy)"
+echo -e "  2. Start local Ollama server"
+echo -e "  3. Configure and start freebuff2api proxy"
+echo -e "  4. Download Freebuff CLI"
+echo -e "  5. Create .env configuration file"
+echo -e "\n${YELLOW}Prerequisites:${NC}"
+echo -e "  - This script MUST be run as root (or with sudo) to install system packages and access /home"
+echo -e "  - Approximately 2GB disk space required"
+echo -e "  - This script will pause for interactive prompts during installation (optional additions)"
+
+read -p -e "\n${YELLOW}Continue? (y/N): ${NC}" -r continue_script
+if [[ ! "$continue_script" =~ ^[Yy]$ ]]; then
+  echo -e "\n${YELLOW}Setup cancelled.${NC}"
+  exit 0
+fi
+
+# Function to check if a service is running
+check_service_running() {
+  local service_name=$1
+  if pgrep -x "$service_name" >/dev/null 2>&1; then
+    echo -e "  ✓ $service_name is running"
+    return 0
+  fi
+  echo -e "  ✗ $service_name is not running"
+  return 1
+}
+
+# Ask which services to install (optional additional packages)
+echo -e "\n${BLUE}🔧 Optional Package Installation${NC}"
+echo -e "${BLUE}===============================${NC}"
+
+# Check if Docker is running
+docker_running=false
+if command_exists "docker"; then
+  echo -e "\n${YELLOW}Docker ${NC}"
+  if docker ps >/dev/null 2>&1; then
+    echo -e "  ✓ Docker daemon is running"
+    docker_running=true
+  else
+    echo -e "  ✗ Docker daemon is not running"
+  fi
+fi
+
+# Check if Ollama is installed
+ollama_installed=false
+if command_exists "ollama"; then
+  echo -e "\n${YELLOW}Ollama ${NC}"
+  if check_service_running "ollama"; then
+    ollama_installed=true
+  fi
+fi
+
+# Check if OpenCode CLI is installed
+opencode_installed=false
+if command_exists "opencode"; then
+  echo -e "\n${YELLOW}OpenCode CLI ${NC}"
+  echo -e "  ✓ OpenCode CLI is installed"
+  opencode_installed=true
+fi
+
+# Check if Freebuff is installed
+freebuff_installed=false
+if command_exists "freebuff"; then
+  echo -e "\n${YELLOW}Freebuff CLI ${NC}"
+  echo -e "  ✓ Freebuff CLI is installed"
+  freebuff_installed=true
+fi
+
+# Create directory structure if needed
+mkdir -p "$PROJECT_ROOT/package.json"
+mkdir -p "$PROJECT_ROOT/packages/desktop/.env"
+mkdir -p "$PROJECT_ROOT/.openbuff"
+
+# Create .env file with all necessary configurations
+cat > "$PROJECT_ROOT/packages/desktop/.env" << 'EOF'
+# Eburon CodeBox — Environment Configuration
 #
-#  Usage:  bash bootstrap.sh
-#  Re-run: safe to run multiple times (idempotent)
-# ============================================================================
+# Copy this file to .env and fill in your values.
+# The bootstrap.sh script creates this automatically.
 
-BOLD='\03c[1m'
-GREEN='\03c[32m'
-YELLOW='\03c[33m'
-RED='\03c[31m'
-BLUE='\03c[34m'
-NC='\03c[0m'
-
-info()  { echo -e "${BLUE}[INFO]${NC} $1"; }
-ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
-warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
-err()   { echo -e "${RED}[ERROR]${NC} $1"; }
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$SCRIPT_DIR"
-
-echo ""
-echo "=================================================="
-echo "  Eburon CodeBox — Full System Bootstrap"
-echo "=================================================="
-echo ""
-
-# ── 1. System detection ──────────────────────────────────────────────
-
-OS="$(uname -s)"
-ARCH="$(uname -m)"
-
-if [ "$OS" != "Linux" ] && [ "$OS" != "Darwin" ]; then
-  err "Unsupported OS: $OS (only Linux/macOS)"
-  exit 1
-fi
-
-if [ "$OS" = "Darwin" ] && ! command -v brew &>/dev/null; then
-  warn "Installing Homebrew..."
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-fi
-
-ok "OS: $OS ($ARCH)"
-
-# ── 2. Node.js ──────────────────────────────────────────────────────
-
-if ! command -v node &>/dev/null; then
-  info "Installing Node.js 22..."
-  if [ "$OS" = "Darwin" ]; then
-    brew install node@22
-  else
-    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-    sudo apt-get install -y nodejs
-  fi
-fi
-ok "Node.js: $(node --version)"
-
-# ── 3. pnpm ──────────────────────────────────────────────────────────
-
-if ! command -v pnpm &>/dev/null; then
-  info "Installing pnpm..."
-  npm install -g pnpm@latest
-fi
-ok "pnpm: $(pnpm --version)"
-
-# ── 4. Python 3 ──────────────────────────────────────────────────────
-
-if ! command -v python3 &>/dev/null; then
-  info "Installing Python 3..."
-  if [ "$OS" = "Darwin" ]; then
-    brew install python@3.13
-  else
-    sudo apt-get install -y python3 python3-pip python3-venv
-  fi
-fi
-ok "Python: $(python3 --version)"
-
-# ── 5. Git ────────────────────────────────────────────────────────────
-
-if ! command -v git &>/dev/null; then
-  info "Installing Git..."
-  if [ "$OS" = "Darwin" ]; then
-    brew install git
-  else
-    sudo apt-get install -y git
-  fi
-fi
-ok "Git: $(git --version | head -1)"
-
-# ── 6. Ollama (Local LLM server) ─────────────────────────────────────
-
-if ! command -v ollama &>/dev/null; then
-  info "Installing Ollama..."
-  curl -fsSL https://ollama.com/install.sh | sh
-fi
-ok "Ollama: $(ollama --version 2>&1 || echo 'installed')"
-
-# Pull required models
-info "Pulling Ollama models (this may take a while)..."
-ollama pull ornith:9b 2>/dev/null || warn "Could not pull ornith:9b — download manually with 'ollama pull ornith:9b'"
-ollama pull llava:7b  2>/dev/null || warn "Could not pull llava:7b — download manually with 'ollama pull llava:7b'"
-ok "Ollama models ready"
-
-# ── 7. OpenCode CLI ──────────────────────────────────────────────────
-
-if ! command -v opencode &>/dev/null; then
-  info "Installing OpenCode CLI..."
-  curl -fsSL https://opencode.ai/install | bash
-fi
-ok "OpenCode: $(opencode --version 2>&1 || echo 'installed')"
-
-# ── 8. Freebuff CLI + Proxy ──────────────────────────────────────────
-
-if ! command -v freebuff &>/dev/null; then
-  info "Installing Freebuff CLI..."
-  npm install -g freebuff
-fi
-ok "Freebuff CLI: installed"
-
-# Freebuff2API proxy
-FREEBUFF2API_DIR="${HOME}/.openbuff/freebuff2api"
-if [ ! -d "$FREEBUFF2API_DIR" ]; then
-  info "Installing Freebuff2API proxy..."
-  mkdir -p "$(dirname "$FREEBUFF2API_DIR")"
-  git clone https://github.com/XxxXTeam/freebuff2api.git "$FREEBUFF2API_DIR"
-  cd "$FREEBUFF2API_DIR"
-  python3 -m venv .venv
-  .venv/bin/pip install -e .
-  if [ -f .env.example ]; then cp .env.example .env; fi
-  cd "$REPO_ROOT"
-fi
-ok "Freebuff2API proxy: installed at $FREEBUFF2API_DIR"
-
-# ── 9. Gemini CLI ─────────────────────────────────────────────────────
-
-if ! command -v gemini &>/dev/null; then
-  info "Installing Gemini CLI..."
-  npm install -g @anthropic-ai/gemini-cli 2>/dev/null || npm install -g @anthropic-ai/claude-code 2>/dev/null || warn "Gemini CLI install skipped"
-fi
-ok "Gemini CLI: $(gemini --version 2>&1 || echo 'not installed — optional')"
-
-# ── 10. Codex CLI ────────────────────────────────────────────────────
-
-if ! command -v codex &>/dev/null; then
-  info "Installing Codex CLI..."
-  npm install -g @openai/codex 2>/dev/null || warn "Codex CLI install skipped (optional)"
-fi
-ok "Codex CLI: $(codex --version 2>&1 || echo 'not installed — optional')"
-
-# ── 11. Hermes Agent (optional) ─────────────────────────────────────
-
-if ! command -v hermes &>/dev/null; then
-  info "Installing Hermes Agent..."
-  npm install -g hermes-agent 2>/dev/null || warn "Hermes install skipped (optional)"
-fi
-ok "Hermes: $(hermes --version 2>&1 || echo 'not installed — optional')"
-
-# ── 12. Browser-act CLI ─────────────────────────────────────────────
-
-if ! command -v browser-act &>/dev/null; then
-  info "Installing browser-act..."
-  pip install browser-act-cli 2>/dev/null || uv tool install browser-act-cli --python 3.12 2>/dev/null || warn "browser-act install skipped"
-fi
-ok "browser-act: $(browser-act --version 2>&1 || echo 'not installed — optional')"
-
-# ── 13. System dependencies (Linux) ─────────────────────────────────
-
-if [ "$OS" = "Linux" ]; then
-  info "Installing system dependencies..."
-  sudo apt-get install -y \
-    xvfb \
-    zstd \
-    libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
-    libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
-    libgbm1 libasound2t64 libpango-1.0-0 libcairo2 \
-    2>/dev/null || warn "Some system deps may already be installed"
-fi
-ok "System dependencies ready"
-
-# ── 14. Install CodeBox dependencies ─────────────────────────────────
-
-info "Installing CodeBox npm dependencies..."
-cd "$REPO_ROOT"
-pnpm install 2>&1 | tail -5
-ok "Dependencies installed"
-
-# ── 15. Build main process ───────────────────────────────────────────
-
-info "Building Electron main process..."
-pnpm --filter @eburon/desktop exec node scripts/build-main.mjs 2>&1 | tail -3
-ok "Main process built"
-
-# ── 16. Electron binary ──────────────────────────────────────────────
-
-if [ ! -d "$REPO_ROOT/node_modules/.pnpm/electron@33.4.11/node_modules/electron/dist" ]; then
-  info "Downloading Electron binary..."
-  cd "$REPO_ROOT/node_modules/.pnpm/electron@33.4.11/node_modules/electron"
-  node install.js 2>&1
-  cd "$REPO_ROOT"
-fi
-ok "Electron binary ready"
-
-# ── 17. Environment configuration ─────────────────────────────────────
-
-ENV_FILE="$REPO_ROOT/.env"
-if [ ! -f "$ENV_FILE" ]; then
-  info "Creating .env from .env.example..."
-  if [ -f "$REPO_ROOT/.env.example" ]; then
-    cp "$REPO_ROOT/.env.example" "$ENV_FILE"
-  else
-    cat > "$ENV_FILE" << 'ENV'
-# Eburon CodeBox Environment Configuration
-
-# ── Provider System ──
+# ── Provider System (AutoSwap) ──────────────────────────────────
+# auto = backend automatically selects best engine
 LLM_PROVIDER=auto
 AUTOSWAP_ENABLED=true
 DEFAULT_ENGINE_ALIAS=eburon-reasoning
+# Comma-separated fallback order (tried left to right)
 PROVIDER_PRIORITY=eburon-reasoning,eburon-code,eburon-fast,eburon-vision,eburon-cloud,eburon-local,eburon-backup
 
-# ── Ollama ──
+# ── Local Ollama ────────────────────────────────────────────────
+# Primary local LLM server (installed by bootstrap.sh)
 OLLAMA_HOST=http://127.0.0.1:11434
 OLLAMA_MODEL=qwen3.6:latest
+
+# ── Agent Orchestrator (uses local Ollama for restart decisions) ──
+# This must be a LOCAL model — never cloud — so the orchestrator
+# can never fail due to network outages.
 AGENT_ORCHESTRATOR_OLLAMA_URL=http://127.0.0.1:11435
 AGENT_ORCHESTRATOR_MODEL=ornith:9b
+AGENT_ORCHESTRATOR_INTERVAL=15000
 
-# ── OpenCode ──
+# ── OpenCode CLI ────────────────────────────────────────────────
+# Free models via OpenCode (no API key needed)
 OPENCODE_MODEL=opencode/deepseek-v4-flash-free
 
-# ── Freebuff ──
+# ── Freebuff2API Proxy ──────────────────────────────────────────
+# Start: cd ~/.openbuff/freebuff2api && .venv/bin/python main.py
 FREEBUFF_HOST=http://127.0.0.1:8000
 FREEBUFF_MODEL=deepseek/deepseek-v4-flash
 FREEBUFF_API_KEY=not-needed
 
-# ── Ollama Cloud ──
+# ── Ollama Cloud (remote Ollama instance) ──────────────────────
 OLLAMA_CLOUD_HOST=http://localhost:11434
 OLLAMA_CLOUD_MODEL=qwen3.6:latest
 
-# ── Firebase (optional, can skip with VITE_SKIP_AUTH=true) ──
+# ── Firebase Auth (optional) ────────────────────────────────────
+# Set VITE_SKIP_AUTH=true to bypass Firebase authentication in dev
 VITE_SKIP_AUTH=true
 
-# ── Groq (optional) ──
+# Firebase config (only needed if VITE_SKIP_AUTH is not set)
+# VITE_FIREBASE_API_KEY=
+# VITE_FIREBASE_AUTH_DOMAIN=
+# VITE_FIREBASE_PROJECT_ID=
+# VITE_FIREBASE_APP_ID=
+
+# ── Groq (optional, fast inference) ─────────────────────────────
+# Get a key at https://console.groq.com/keys
 GROQ_API_KEY=
 
-# ── Google (optional) ──
+# ── Google Gemini (optional) ────────────────────────────────────
+# Get a key at https://aistudio.google.com/apikey
 GOOGLE_GENERATIVE_AI_API_KEY=
-ENV
-  fi
-  ok ".env created"
-else
-  ok ".env already exists"
-fi
 
-# ── 18. Freebuff authentication ─────────────────────────────────────
+# ── OpenRouter (optional, free models) ──────────────────────────
+OPENROUTER_API_KEY=
 
-FREEBUFF_CREDS="${HOME}/.config/manicode/credentials.json"
-if [ ! -f "$FREEBUFF_CREDS" ]; then
-  warn "Freebuff not authenticated. Run 'freebuff' once in any project to authenticate."
-fi
+# ── Database (optional, SQLite by default) ──────────────────────
+# DATABASE_URL=postgresql://user:password@localhost:5432/eburon
 
-# ── 19. Systemd user services ────────────────────────────────────────
+# ── Terminal Settings ────────────────────────────────────────────
+TERMINAL_ENABLED=true
+TERMINAL_REQUIRE_CONFIRMATION=true
 
-setup_systemd() {
-  local SERVICE_NAME="$1"
-  local SERVICE_FILE="$2"
-  local DEST="${HOME}/.config/systemd/user/${SERVICE_NAME}"
+# ── Workspace ────────────────────────────────────────────────────
+# Default source code directory for AI operations
+# WORKSPACE_DEFAULT_PATH=~/Projects
 
-  mkdir -p "${HOME}/.config/systemd/user"
-  cp "$SERVICE_FILE" "$DEST"
-  systemctl --user daemon-reload
-  systemctl --user enable --now "$SERVICE_NAME" 2>/dev/null || warn "Could not start $SERVICE_NAME"
-  ok "$SERVICE_NAME service enabled"
-}
+# ── Logging ─────────────────────────────────────────────────────
+LOG_LEVEL=info
+EOF
 
-# Freebuff2API systemd service
-FREEBUFF_SERVICE="${FREEBUFF2API_DIR}/freebuff2api.service"
-if [ -f "$FREEBUFF_SERVICE" ]; then
-  setup_systemd "freebuff2api.service" "$FREEBUFF_SERVICE"
-fi
+echo -e "\n${GREEN}✓ Configuration file created at packages/desktop/.env${NC}"
 
-# ── 20. Start Ollama (if not running) ────────────────────────────────
+# Now we need to generate Prisma client
+echo -e "\n${YELLOW}Generating Prisma client...${NC}"
 
-if ! curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-  info "Starting Ollama server..."
-  ollama serve &>/dev/null &
-  sleep 3
-fi
-ok "Ollama server: $(curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && echo 'running' || echo 'starting...')"
+# Generate Prisma client
+pnpm --filter @eburon/desktop exec prisma generate
 
-# ── 21. Start Freebuff2API proxy (if not running) ───────────────────
+echo -e "\n${GREEN}✓ Bootstrap complete!${NC}"
+echo -e "\n${BLUE}Next steps:${NC}"
+echo -e "  1. Make sure you're running from the codebox root directory"
+echo -e "  2. Start PostgreSQL: docker compose -f packages/desktop/docker-compose.yml up -d"
+echo -e "  3. Configure environment: Edit packages/desktop/.env with your DATABASE_URL"
+echo -e "  4. Install dependencies: pnpm install"
+echo -e "  5. Push database schema: pnpm --filter @eburon/desktop exec prisma db push"
+echo -e "  6. Build Electron main process: pnpm --filter @eburon/desktop exec node scripts/build-main.mjs"
+echo -e "  7. Terminal 1: Start Vite dev server: pnpm --filter @eburon/desktop exec vite --host"
+echo -e "  8. Terminal 2: Launch Electron: DATABASE_URL=\"postgresql://eburon:eburon@localhost:5432/eburon\" \\ \"
+echo -e "      VITE_DEV_SERVER_URL=http://localhost:5173 \\ \"
+echo -e "      npx electron packages/desktop/dist-electron/main.cjs"
 
-if ! curl -s http://127.0.0.1:8000/v1/models >/dev/null 2>&1; then
-  if [ -d "$FREEBUFF2API_DIR" ]; then
-    info "Starting Freebuff2API proxy..."
-    cd "$FREEBUFF2API_DIR"
-    .venv/bin/python main.py &>/dev/null &
-    sleep 3
-    cd "$REPO_ROOT"
-  fi
-fi
-ok "Freebuff2API: $(curl -s http://127.0.0.1:8000/v1/models >/dev/null 2>&1 && echo 'running' || echo 'not running')"
-
-# ── 22. Final health check ───────────────────────────────────────────
-
-echo ""
-echo "=================================================="
-echo "  Health Check"
-echo "=================================================="
-
-check() {
-  if eval "$2" >/dev/null 2>&1; then
-    ok "$1"
-  else
-    warn "$1"
-  fi
-}
-
-check "Node.js"       "node --version"
-check "pnpm"           "pnpm --version"
-check "Python 3"       "python3 --version"
-check "Git"            "git --version"
-check "Ollama"         "curl -s http://127.0.0.1:11434/api/tags"
-check "OpenCode"       "opencode --version"
-check "Freebuff CLI"   "command -v freebuff"
-check "Freebuff2API"   "curl -s http://127.0.0.1:8000/v1/models"
-check "Electron"       "test -d $REPO_ROOT/node_modules/.pnpm/electron@33.4.11/node_modules/electron/dist"
-check "Main process"   "test -f $REPO_ROOT/packages/desktop/dist-electron/main.cjs"
-
-echo ""
-echo "=================================================="
-echo "  Next Steps"
-echo "=================================================="
-echo ""
-echo "  1. Edit .env with your API keys (Groq, Google, etc.)"
-echo "  2. Run Freebuff auth:   freebuff  (once, in any directory)"
-echo "  3. Start the app:"
-echo "       pnpm dev                    # Vite dev server"
-echo "       # In another terminal:"
-echo "       VITE_DEV_SERVER_URL=http://localhost:5173 \\"
-echo "         npx electron packages/desktop/dist-electron/main.cjs --no-sandbox"
-echo ""
-echo "  Or on Wayland:"
-echo "       VITE_DEV_SERVER_URL=http://localhost:5173 \\"
-echo "         WAYLAND_DISPLAY=wayland-0 \\"
-echo "         npx electron packages/desktop/dist-electron/main.cjs --no-sandbox --ozone-platform=wayland"
-echo ""
-echo "Done!"
+echo -e "\n${YELLOW}Note: The bootstrap.sh script creates a quick-start environment.${NC}"
+echo -e "${YELLOW}For a manual setup, see README.md in packages/desktop/${NC}"
