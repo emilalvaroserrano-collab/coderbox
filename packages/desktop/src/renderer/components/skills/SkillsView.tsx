@@ -26,7 +26,7 @@ export default function SkillsView() {
         <div>
           <h2 className="text-xl font-semibold text-codebox-primary">Skills &amp; Capabilities</h2>
           <p className="text-[12.5px] text-codebox-secondary mt-0.5">
-            Configure specialized instructions, AST parsers, and custom tools for Codebox.
+            Configure specialized instructions, AST parsers, and custom tools for CodeBox.
           </p>
         </div>
         <button className="btn-primary flex items-center gap-1.5">

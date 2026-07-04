@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, protocol } from 'electron'
 import path from 'path'
 import { getOrchestrator } from './providers/orchestrator'
 import { SafeLogger } from './providers/logger'
-import { getAllAliases, getProviderConfig } from './providers/config'
+import { getAllAliases, getProviderConfig, getAllConfigs } from './providers/config'
 import { getDb, disconnectDb } from './db'
 import { GoogleService } from './services'
 
@@ -66,9 +66,55 @@ ipcMain.handle('dialog:openFile', async () => {
   return result.canceled ? null : result.filePaths[0]
 })
 
+// Read a file from the local filesystem (used when attaching source code)
+ipcMain.handle('file:read', async (_event, filePath: string, maxBytes = 51200) => {
+  try {
+    const fs = await import('fs/promises')
+    const stat = await fs.stat(filePath)
+    if (stat.size > maxBytes) {
+      const content = await fs.readFile(filePath, 'utf-8')
+      return { path: filePath, size: stat.size, content: content.slice(0, maxBytes), truncated: true }
+    }
+    const content = await fs.readFile(filePath, 'utf-8')
+    return { path: filePath, size: stat.size, content, truncated: false }
+  } catch (err: any) {
+    return { path: filePath, error: err.message }
+  }
+})
+
+// List files in a directory (used when attaching a source folder)
+ipcMain.handle('file:listDir', async (_event, dirPath: string, maxEntries = 200) => {
+  try {
+    const fs = await import('fs/promises')
+    const path = await import('path')
+    const entries = await fs.readdir(dirPath, { withFileTypes: true })
+    const result: Array<{ name: string; type: string; path: string; size?: number }> = []
+    for (const entry of entries.slice(0, maxEntries)) {
+      const fullPath = path.join(dirPath, entry.name)
+      const type = entry.isDirectory() ? 'dir' : entry.isFile() ? 'file' : 'other'
+      let size: number | undefined
+      if (entry.isFile()) {
+        try { const s = await fs.stat(fullPath); size = s.size } catch {}
+      }
+      result.push({ name: entry.name, type, path: fullPath, size })
+    }
+    return { path: dirPath, entries: result }
+  } catch (err: any) {
+    return { path: dirPath, error: err.message }
+  }
+})
+
 ipcMain.handle('app:getVersion', () => app.getVersion())
 
 const orchestrator = getOrchestrator()
+
+// Start the Agent Orchestrator watchdog (monitors and restarts agents)
+import { getAgentOrchestrator, DEFAULT_AGENTS } from './providers/agent-orchestrator'
+const agentOrchestrator = getAgentOrchestrator()
+for (const agentConfig of DEFAULT_AGENTS) {
+  agentOrchestrator.register(agentConfig)
+}
+agentOrchestrator.start()
 
 ipcMain.handle('db:user:findByFirebaseUid', async (_e, firebaseUid: string) => {
   const db = getDb()
@@ -226,10 +272,15 @@ ipcMain.handle('google:drive:createFolder', async (_e, name: string, parentFolde
 })
 
 ipcMain.handle('provider:getAliases', () => {
-  return getAllAliases()
+  // Public API: returns only generic public aliases (no internal names)
+  return ['eburon-auto', ...getAllAliases()]
 })
 
 ipcMain.handle('provider:getConfig', (_event, alias: string) => {
+  // Public API: only returns displayName + contextLimit (never internalName/env)
+  if (alias === 'eburon-auto') {
+    return { alias: 'eburon-auto', displayName: 'Eburon AI', contextLimit: 128000 }
+  }
   const cfg = getProviderConfig(alias)
   if (!cfg) return null
   return {
@@ -240,15 +291,17 @@ ipcMain.handle('provider:getConfig', (_event, alias: string) => {
 })
 
 ipcMain.handle('provider:checkAvailability', async () => {
+  // Public API: returns alias -> boolean (never exposes internal names)
   return orchestrator.checkAvailability()
 })
 
 ipcMain.handle('provider:getSwitchHistory', () => {
+  // Public API: strips internal provider names, uses branded messages
   return orchestrator.getSwitchHistory().map((entry) => ({
     timestamp: entry.timestamp,
-    failedAlias: entry.failedAlias,
+    failedAlias: 'Eburon AI',
     reason: entry.reason,
-    nextAlias: entry.nextAlias,
+    nextAlias: 'Eburon AI',
     success: entry.success,
   }))
 })
@@ -266,13 +319,21 @@ ipcMain.handle('provider:execute', async (_event, payload: {
   sessionId?: string
 }) => {
   const { prompt: text, provider } = payload
-  const response = await orchestrator.execute(text, undefined, provider)
-  return {
-    success: true,
-    content: response.content,
-    tokensUsed: response.tokensUsed,
-    finishReason: response.finishReason,
-    modelUsed: response.modelUsed,
+  try {
+    const response = await orchestrator.execute(text, undefined, provider)
+    // Sanitize: never expose internal modelUsed
+    return {
+      success: true,
+      content: response.content,
+      tokensUsed: response.tokensUsed,
+      finishReason: response.finishReason,
+      modelUsed: 'Eburon AI',
+    }
+  } catch (err: any) {
+    return {
+      success: false,
+      error: 'Eburon AI is temporarily unavailable. Please try again shortly.',
+    }
   }
 })
 
@@ -286,23 +347,96 @@ ipcMain.handle('provider:streamStart', async (_event, payload: {
   streamBuffer = []
   const { prompt: text, provider } = payload
 
-  for await (const { chunk, provider: prov } of orchestrator.stream(text, undefined, provider)) {
-    streamBuffer.push(chunk)
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('provider:streamChunk', { chunk, provider: prov })
+  try {
+    for await (const { chunk, provider: prov } of orchestrator.stream(text, undefined, provider)) {
+      streamBuffer.push(chunk)
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        // Sanitize: always send "Eburon AI" as provider, never the internal alias
+        mainWindow.webContents.send('provider:streamChunk', { chunk, provider: 'Eburon AI' })
+      }
     }
-  }
 
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('provider:streamDone', {
-      content: streamBuffer.join(''),
-      modelUsed: 'eburon-sirius',
-    })
-  }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('provider:streamDone', {
+        content: streamBuffer.join(''),
+        modelUsed: 'Eburon AI',
+      })
+    }
 
-  return { success: true }
+    return { success: true }
+  } catch (err: any) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('provider:streamError', {
+        error: 'Eburon AI is temporarily unavailable. Please try again shortly.',
+      })
+    }
+    return { success: false, error: 'Eburon AI is temporarily unavailable.' }
+  }
 })
 
 ipcMain.handle('provider:streamStop', async () => {
   return { success: true }
+})
+
+// ─── Admin-only endpoints (never expose to normal users) ───
+
+ipcMain.handle('provider:admin:getStatus', async () => {
+  // Admin only: returns full internal details for the admin panel
+  const availability = await orchestrator.checkAvailability()
+  const configs = getAllConfigs()
+  const switchHistory = orchestrator.getSwitchHistory()
+  const requestLog = orchestrator.getRequestLog()
+
+  return configs.map((cfg) => ({
+    alias: cfg.alias,
+    internalRoute: cfg.internalName,
+    model: cfg.env.OLLAMA_MODEL || cfg.env.OPENCODE_MODEL || cfg.env.FREEBUFF_MODEL || cfg.env.OLLAMA_CLOUD_MODEL || 'unknown',
+    displayName: cfg.displayName,
+    contextLimit: cfg.contextLimit,
+    available: availability[cfg.alias] ?? false,
+    timeout: cfg.timeout,
+  }))
+})
+
+ipcMain.handle('provider:admin:getSwitchHistory', () => {
+  // Admin only: full switch history with internal names
+  return orchestrator.getSwitchHistory()
+})
+
+ipcMain.handle('provider:admin:getRequestLog', () => {
+  // Admin only: request log with alias/route/latency
+  return orchestrator.getRequestLog()
+})
+
+ipcMain.handle('provider:admin:testRoute', async (_event, alias: string) => {
+  // Admin only: test a specific route
+  const cfg = getProviderConfig(alias)
+  if (!cfg) return { success: false, error: 'Unknown alias' }
+  const start = Date.now()
+  try {
+    const response = await orchestrator.execute('Say OK', undefined, alias)
+    return {
+      success: true,
+      latency: Date.now() - start,
+      content: response.content?.slice(0, 100),
+    }
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message,
+      latency: Date.now() - start,
+    }
+  }
+})
+
+// ─── Agent Orchestrator endpoints (admin only) ───
+
+ipcMain.handle('orchestrator:getStatus', () => {
+  // Admin only: returns full status of all monitored agents
+  return agentOrchestrator.getStatus()
+})
+
+ipcMain.handle('orchestrator:restart', async (_event, agentId: string) => {
+  // Admin only: manually restart a specific agent
+  return { success: await agentOrchestrator.restart(agentId) }
 })

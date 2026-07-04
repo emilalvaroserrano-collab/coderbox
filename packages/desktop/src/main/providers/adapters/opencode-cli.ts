@@ -14,6 +14,7 @@ export class OpencodeCliAdapter implements ProviderAdapter {
   readonly alias: string
   readonly displayName: string
   readonly contextLimit: number
+  readonly availableModels: string[]
   protected config: ProviderConfig
   protected processEnv: Record<string, string>
   protected model: string
@@ -25,7 +26,19 @@ export class OpencodeCliAdapter implements ProviderAdapter {
     this.displayName = config.displayName
     this.contextLimit = config.contextLimit
     this.processEnv = mergeProviderEnv(config, processEnv)
-    this.model = this.processEnv['OPENCODE_MODEL'] || 'opencode/deepseek-v4-flash-free'
+    this.model = this.processEnv['OPENCODE_MODEL'] || config.models[0] || 'opencode/deepseek-v4-flash-free'
+    this.availableModels = config.models || [this.model]
+  }
+
+  /** Swap to a different model on this same opencode CLI provider */
+  setModel(model: string): void {
+    SafeLogger.internal('info', `[${this.internalName}] Swapping model: ${this.model} -> ${model}`)
+    this.model = model
+    this.processEnv['OPENCODE_MODEL'] = model
+  }
+
+  get currentModel(): string {
+    return this.model
   }
 
   async isAvailable(): Promise<boolean> {

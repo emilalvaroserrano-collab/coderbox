@@ -61,6 +61,10 @@ interface AppState {
   ollamaConnected: boolean
   availableProviders: ProviderInfo[]
   providerLoading: boolean
+  /** Source code path selected by the user (folder on local machine) */
+  sourcePath: string | null
+  /** Files attached to the current thread */
+  attachedFiles: Array<{ path: string; name: string; content?: string; size?: number }>
 
   setActiveView: (view: AppState['activeView']) => void
   setActiveThread: (id: string | null) => void
@@ -81,6 +85,10 @@ interface AppState {
   setDiffContent: (content: string | null) => void
   setEngineConnected: (v: boolean) => void
   setOllamaConnected: (v: boolean) => void
+  setSourcePath: (path: string | null) => void
+  addAttachedFile: (file: { path: string; name: string; content?: string; size?: number }) => void
+  removeAttachedFile: (path: string) => void
+  clearAttachedFiles: () => void
   refreshProviders: () => Promise<void>
   sendPrompt: (threadId: string, text: string) => Promise<void>
 }
@@ -116,6 +124,8 @@ export const useStore = create<AppState>((set, get) => ({
   ollamaConnected: false,
   availableProviders: [],
   providerLoading: false,
+  sourcePath: null,
+  attachedFiles: [],
 
   setActiveView: (view) => set({ activeView: view }),
   setActiveThread: (id) => set({ activeThreadId: id }),
@@ -150,6 +160,15 @@ export const useStore = create<AppState>((set, get) => ({
   setDiffContent: (content) => set({ diffContent: content }),
   setEngineConnected: (v) => set({ engineConnected: v }),
   setOllamaConnected: (v) => set({ ollamaConnected: v }),
+  setSourcePath: (path) => set({ sourcePath: path }),
+  addAttachedFile: (file) => set((s) => {
+    if (s.attachedFiles.some((f) => f.path === file.path)) return s
+    return { attachedFiles: [...s.attachedFiles, file] }
+  }),
+  removeAttachedFile: (path) => set((s) => ({
+    attachedFiles: s.attachedFiles.filter((f) => f.path !== path),
+  })),
+  clearAttachedFiles: () => set({ attachedFiles: [] }),
 
   refreshProviders: async () => {
     set({ providerLoading: true })
@@ -200,6 +219,24 @@ export const useStore = create<AppState>((set, get) => ({
       let fullPrompt = text
       if (memoryContext) {
         fullPrompt = `Relevant context from past sessions:\n${memoryContext}\n\nUser: ${text}`
+      }
+
+      // Include source code path context
+      if (state.sourcePath) {
+        fullPrompt = `Source code directory: ${state.sourcePath}\nAll file operations should be relative to this path unless specified otherwise.\n\n${fullPrompt}`
+      }
+
+      // Include attached file contents
+      if (state.attachedFiles.length > 0) {
+        const fileContext = state.attachedFiles
+          .map((f) => {
+            if (f.content) {
+              return `--- ${f.name} (${f.path}) ---\n${f.content.slice(0, 10000)}${f.content.length > 10000 ? '\n... (truncated)' : ''}`
+            }
+            return `--- ${f.name} (${f.path}) ---`
+          })
+          .join('\n\n')
+        fullPrompt = `Attached files:\n${fileContext}\n\n${fullPrompt}`
       }
 
       if (systemPrompt) {

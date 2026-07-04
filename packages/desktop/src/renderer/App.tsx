@@ -19,7 +19,7 @@ import Toast from '@/components/Toast'
 
 export default function App() {
   const [ready, setReady] = useState(false)
-  const [authenticated, setAuthenticated] = useState(false)
+  const [authenticated, setAuthenticated] = useState(import.meta.env.VITE_SKIP_AUTH === 'true')
   const { theme, activeView, isSidebarOpen } = useStore()
   useKeyboardShortcuts()
 
@@ -45,15 +45,9 @@ export default function App() {
   return (
     <div className="flex h-screen overflow-hidden" {...(isLight ? { 'data-theme': 'light' } : {})}>
       <Sidebar />
-      <main className="flex-1 flex flex-col relative bg-codebox-bg h-screen">
+      <main className={`flex-1 flex flex-col relative bg-codebox-bg h-screen transition-[margin-left] duration-250 ${isSidebarOpen ? 'ml-[260px]' : 'ml-0'}`}>
         <TopBar />
-        <div
-          className="flex-1 flex flex-col items-center justify-center relative overflow-y-auto px-5 pb-[180px] pt-5"
-          style={{
-            transform: isSidebarOpen ? 'translateX(0)' : 'translateX(130px)',
-            transition: 'transform 0.25s ease',
-          }}
-        >
+        <div className="flex-1 flex flex-col items-center justify-center relative overflow-y-auto px-5 pb-[180px] pt-5">
           <ContentView />
         </div>
         {showComposer && <Composer />}

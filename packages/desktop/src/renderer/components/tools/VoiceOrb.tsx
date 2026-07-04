@@ -10,7 +10,7 @@ export default function VoiceOrb() {
   const orbStartPosRef = useRef({ x: 0, y: 0 })
   const hasDraggedRef = useRef(false)
 
-  const tooltipText = isOrbConnected ? 'Listening... (Connected to Codebox WS)' : 'Voice Agent: Idle (Click to connect)'
+  const tooltipText = isOrbConnected ? 'Listening... (Connected to CodeBox WS)' : 'Voice Agent: Idle (Click to connect)'
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     isDraggingRef.current = true

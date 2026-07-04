@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '@/lib/auth/useAuth'
-import { Code2, Mail, Github } from 'lucide-react'
+import { Box, Mail, Github } from 'lucide-react'
 
 interface AuthPageProps {
   onAuthenticated: () => void
@@ -36,9 +36,9 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
       <div className="w-full max-w-sm mx-auto px-6">
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-codebox-blue/10 flex items-center justify-center mb-4">
-            <Code2 size={28} className="text-codebox-blue" />
+            <Box size={28} className="text-codebox-blue" />
           </div>
-          <h1 className="text-2xl font-semibold text-codebox-primary">Eburon Codebox</h1>
+          <h1 className="text-2xl font-semibold text-codebox-primary">Eburon CodeBox</h1>
           <p className="text-sm text-codebox-secondary mt-1">Sign in to continue</p>
         </div>
 

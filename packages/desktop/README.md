@@ -1,7 +1,7 @@
-# Eburon Codebox
+# Eburon CodeBox
 
 **AI coding agent desktop app** — Electron + React + Vite + Zustand + Prisma + PostgreSQL.  
-Provider-agnostic LLM interface with auto-failover, Firebase auth, and a fully branded frontend that hides all real provider/model names.
+Provider-agnostic LLM interface with auto-failover, Firebase auth, and a branded frontend that hides all real provider/model names.
 
 ---
 
@@ -91,11 +91,11 @@ All real provider names (OpenAI, Anthropic, Ollama, OpenCode, FreeBuff) and mode
 | Alias | Display Name | Backend | File |
 |---|---|---|---|
 | `eburon-sirius` | Eburon Sirius | Local Ollama (qwen3.6) | `opencode-zen.ts` |
-| `eburon-vega` | Eburon Vega | Local Ollama (gemma4) | `codex-ollama.ts` |
+| `eburon-vega` | Eburon Vega | Local Ollama (gemma4) | `vega-ollama.ts` |
 | `eburon-zen` | Eburon Zen | OpenCode CLI (free) | `opencode-cli.ts` |
 | `eburon-breeze` | Eburon Breeze | FreeBuff proxy | `freebuff-cli.ts` |
 | `eburon-vortex` | Eburon Vortex | Cloud Ollama | `ollama-cloud.ts` |
-| `eburon-orion` | Eburon Orion | Local Ollama (ornith) | `claude-ollama.ts` |
+| `eburon-orion` | Eburon Orion | Local Ollama (ornith) | `orion-ollama.ts` |
 | `eburon-polaris` | Eburon Polaris | Local Ollama (orbit-ai) | `freebuff.ts` |
 | `auto` | Auto (Best Available) | Priority-based selection | orchestrator |
 

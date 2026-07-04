@@ -90,7 +90,7 @@ export async function authenticate(): Promise<boolean> {
           await saveTokens(mapCredentials(tokens))
 
           res.writeHead(200, { 'Content-Type': 'text/html' })
-          res.end(`<html><body><h1>Authenticated!</h1><p>You can close this window and return to Eburon Codebox.</p></body></html>`)
+          res.end(`<html><body><h1>Authenticated!</h1><p>You can close this window and return to Eburon CodeBox.</p></body></html>`)
           server.close()
           resolve(true)
         }

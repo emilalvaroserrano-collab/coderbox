@@ -73,6 +73,10 @@
     transition: width 0.25s ease, opacity 0.25s ease;
   }
 
+  .sidebar-slide {
+    transition: transform 0.25s ease;
+  }
+
   .nav-item-base {
     @apply flex items-center gap-2.5 px-2.5 py-2 rounded-md text-codebox-secondary cursor-pointer font-normal text-[13px];
   }

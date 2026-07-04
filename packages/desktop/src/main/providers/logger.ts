@@ -14,6 +14,12 @@ interface InternalLogEntry {
 const internalLogs: InternalLogEntry[] = []
 const switchLogs: SwitchLogEntry[] = []
 
+/**
+ * SafeLogger — all messages that reach the frontend use branded "Eburon AI" name.
+ * Internal logs keep provider/alias details for admin debugging only.
+ *
+ * Never log: API keys, secrets, passwords, tokens, or full sensitive prompts.
+ */
 export class SafeLogger {
   static internal(level: LogLevel, internalMessage: string, safeMessage?: string, alias?: string): void {
     const entry: InternalLogEntry = {
@@ -27,40 +33,37 @@ export class SafeLogger {
     console.log(`[provider:internal] [${level}] ${internalMessage}`)
   }
 
-  static frontend(alias: string, message: string): void {
-    const safeAlias = internalToAlias(alias) || alias
-    console.log(`[provider:${safeAlias}] ${message}`)
+  /**
+   * frontend() — emits a message visible to the user.
+   * Always uses "Eburon AI" branding, never exposes provider/model names.
+   */
+  static frontend(_alias: string, message: string): void {
+    console.log(`[provider:Eburon AI] ${message}`)
   }
 
   static switch(
-    failedInternalProvider: string,
+    failedAlias: string,
     reason: FailReason,
-    nextInternalProvider: string,
+    nextAlias: string,
     success: boolean,
     errorDetail?: string,
   ): void {
-    const failedAlias = internalToAlias(failedInternalProvider) || failedInternalProvider
-    const nextAlias = internalToAlias(nextInternalProvider) || nextInternalProvider
-
     const entry: SwitchLogEntry = {
       timestamp: Date.now(),
-      failedInternalProvider,
+      failedInternalProvider: failedAlias,
       failedAlias,
       reason,
-      nextInternalProvider,
+      nextInternalProvider: nextAlias,
       nextAlias,
+      swapType: 'provider',
       success,
       errorDetail,
     }
     switchLogs.push(entry)
 
     console.log(
-      `[provider:switch] ${failedInternalProvider} -> ${nextInternalProvider} | reason=${reason} | success=${success}`,
+      `[provider:switch] ${failedAlias} -> ${nextAlias} | reason=${reason} | success=${success}`,
     )
-
-    if (!success) {
-      console.log(`[provider:frontend] ${failedAlias} reached its limit. Switching to ${nextAlias}.`)
-    }
   }
 
   static getSwitchLogs(): SwitchLogEntry[] {
@@ -71,12 +74,11 @@ export class SafeLogger {
     return [...internalLogs]
   }
 
-  static getSafeSwitchMessage(failedAlias: string, nextAlias: string): string {
-    return `${failedAlias} reached its limit. Switching to ${nextAlias}.`
-  }
-
-  static getAllFailedSafeMessage(aliases: string[]): string {
-    return 'All available Eburon engines failed to complete the task. Please try again.'
+  /**
+   * @deprecated Use BRANDED_MESSAGES from orchestrator instead
+   */
+  static getAllFailedSafeMessage(_aliases: string[]): string {
+    return 'Eburon AI is temporarily unavailable. Please try again shortly.'
   }
 
   static clear(): void {

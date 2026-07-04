@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { useStore } from '@/store'
-import { Plus, ArrowUp, GitBranch, Terminal, Loader2 } from 'lucide-react'
+import { Plus, ArrowUp, GitBranch, Terminal, Loader2, FolderOpen, FileText, X } from 'lucide-react'
 
 const MODE_TABS = ['local', 'worktree', 'cloud'] as const
 
@@ -11,6 +11,7 @@ export default function Composer() {
     activeMode, setActiveMode, addThread, addMessage, activeThreadId,
     setActiveView, setActiveThread, activeView, isStreaming, sendPrompt,
     toggleTerminal, isTerminalOpen,
+    sourcePath, setSourcePath, attachedFiles, addAttachedFile, removeAttachedFile,
   } = useStore()
 
   const hasText = text.trim().length > 0
@@ -30,6 +31,35 @@ export default function Composer() {
       // Allow newline
     }
   }, [text, isStreaming])
+
+  // Attach a single file — opens OS file picker, reads content
+  const handleAttachFile = useCallback(async () => {
+    if (!window.electronAPI?.openFile) return
+    const filePath = await window.electronAPI.openFile()
+    if (!filePath) return
+
+    const fileName = filePath.split('/').pop() || filePath
+
+    // Read file content via IPC (max 50KB)
+    let content: string | undefined
+    let size: number | undefined
+    if (window.electronAPI?.readFile) {
+      const result = await window.electronAPI.readFile(filePath, 51200)
+      content = result.content
+      size = result.size
+    }
+
+    addAttachedFile({ path: filePath, name: fileName, content, size })
+  }, [addAttachedFile])
+
+  // Attach a source folder — sets the working directory for the AI
+  const handleAttachFolder = useCallback(async () => {
+    if (!window.electronAPI?.openDirectory) return
+    const dirPath = await window.electronAPI.openDirectory()
+    if (!dirPath) return
+
+    setSourcePath(dirPath)
+  }, [setSourcePath])
 
   const send = useCallback(async () => {
     const trimmed = text.trim()
@@ -70,7 +100,39 @@ export default function Composer() {
 
   return (
     <footer className="absolute bottom-0 left-0 right-0 px-5 pb-4 bg-gradient-to-t from-codebox-bg from-65% to-transparent flex flex-col items-center pointer-events-none">
-      {/* Input container matching reference */}
+      {/* Attached files & source path indicators */}
+      {(attachedFiles.length > 0 || sourcePath) && (
+        <div className="w-full max-w-[720px] mb-2 flex flex-wrap gap-2 pointer-events-auto">
+          {sourcePath && (
+            <div className="flex items-center gap-1.5 bg-codebox-input border border-codebox-border rounded-full px-3 py-1 text-[11px] text-codebox-primary">
+              <FolderOpen size={12} className="text-codebox-blue" />
+              <span className="max-w-[200px] truncate">{sourcePath.split('/').pop()}</span>
+              <button
+                className="bg-transparent border-none cursor-pointer p-0 text-codebox-muted hover:text-codebox-primary"
+                onClick={() => setSourcePath(null)}
+                title="Remove source path"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+          {attachedFiles.map((file) => (
+            <div key={file.path} className="flex items-center gap-1.5 bg-codebox-input border border-codebox-border rounded-full px-3 py-1 text-[11px] text-codebox-primary">
+              <FileText size={12} className="text-codebox-green" />
+              <span className="max-w-[160px] truncate">{file.name}</span>
+              <button
+                className="bg-transparent border-none cursor-pointer p-0 text-codebox-muted hover:text-codebox-primary"
+                onClick={() => removeAttachedFile(file.path)}
+                title="Remove file"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Input container */}
       <div className="w-full max-w-[720px] rounded-2xl border border-codebox-border shadow-[0_8px_30px_rgba(0,0,0,0.4)] bg-codebox-input pointer-events-auto focus-within:border-codebox-secondary transition-colors">
         <textarea
           ref={textareaRef}
@@ -85,12 +147,23 @@ export default function Composer() {
         />
         <div className="flex items-center justify-between px-3.5 pb-3 pt-1">
           <div className="flex items-center gap-0.5">
+            {/* Attach file button */}
             <button
               className="bg-transparent border-none text-codebox-secondary cursor-pointer p-[6px] rounded-md hover:bg-white/5 hover:text-codebox-primary"
-              title="Attach context or file"
+              title="Attach file"
+              onClick={handleAttachFile}
             >
               <Plus size={20} />
             </button>
+            {/* Attach source folder button */}
+            <button
+              className={`bg-transparent border-none cursor-pointer p-[6px] rounded-md hover:bg-white/5 ${sourcePath ? 'text-codebox-blue' : 'text-codebox-secondary'} hover:text-codebox-primary`}
+              title="Set source code path"
+              onClick={handleAttachFolder}
+            >
+              <FolderOpen size={18} />
+            </button>
+            {/* Terminal toggle */}
             <button
               className={`bg-transparent border-none cursor-pointer p-[6px] rounded-md hover:bg-white/5 ${isTerminalOpen ? 'text-codebox-green' : 'text-codebox-secondary'} hover:text-codebox-primary`}
               title="Toggle terminal"

@@ -5,7 +5,7 @@ import { X } from 'lucide-react'
 export default function TerminalPane() {
   const { isTerminalOpen, toggleTerminal } = useStore()
   const [history, setHistory] = useState<string[]>([
-    '\x1b[1;35m◆ Eburon Codebox Terminal\x1b[0m',
+    '\x1b[1;35m◆ Eburon CodeBox Terminal\x1b[0m',
     '',
     '\x1b[2m$ git status\x1b[0m',
     'On branch eb/codebox-main',

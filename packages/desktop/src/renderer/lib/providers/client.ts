@@ -31,6 +31,10 @@ declare global {
   interface Window {
     electronAPI?: {
       provider: ElectronProviderAPI
+      openDirectory: () => Promise<string | null>
+      openFile: () => Promise<string | null>
+      readFile: (filePath: string, maxBytes?: number) => Promise<{ path: string; size?: number; content?: string; truncated?: boolean; error?: string }>
+      listDir: (dirPath: string, maxEntries?: number) => Promise<{ path: string; entries?: Array<{ name: string; type: string; path: string; size?: number }>; error?: string }>
     }
   }
 }

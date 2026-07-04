@@ -44,7 +44,7 @@ Single-package pnpm monorepo. The only package is `packages/desktop/`.
 packages/desktop/src/
   main/             # Electron main process (BrowserWindow, IPC, custom protocol)
     providers/      # Provider adapter system (hidden from frontend)
-      adapters/     # 8 provider adapters: opencode-zen, codex-ollama, claude-ollama, freebuff, freebuff-cli, ollama-cloud, opencode-cli, base
+      adapters/     # 8 provider adapters: opencode-zen, vega-ollama, orion-ollama, freebuff, freebuff-cli, ollama-cloud, opencode-cli, base
   renderer/         # React app (Vite-bundled)
     store/          # Single Zustand store — all app state lives here
     lib/            # engine.ts (OpenCode client), skills.ts, memory.ts, ollama.ts, model-router.ts

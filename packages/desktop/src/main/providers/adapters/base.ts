@@ -33,6 +33,7 @@ export abstract class BaseAdapter implements ProviderAdapter {
   readonly alias: string
   readonly displayName: string
   readonly contextLimit: number
+  readonly availableModels: string[]
   protected config: ProviderConfig
   protected processEnv: Record<string, string>
   protected ollamaModel: string
@@ -44,7 +45,20 @@ export abstract class BaseAdapter implements ProviderAdapter {
     this.displayName = config.displayName
     this.contextLimit = config.contextLimit
     this.processEnv = mergeProviderEnv(config, processEnv)
-    this.ollamaModel = this.processEnv['OLLAMA_MODEL'] || 'llama3.2'
+    this.ollamaModel = this.processEnv['OLLAMA_MODEL'] || config.models[0] || 'llama3.2'
+    this.availableModels = config.models || [this.ollamaModel]
+  }
+
+  /** Swap to a different model on this same Ollama provider */
+  setModel(model: string): void {
+    SafeLogger.internal('info', `[${this.internalName}] Swapping model: ${this.ollamaModel} -> ${model}`)
+    this.ollamaModel = model
+    // Also update env so mergeProviderEnv picks it up if re-merged
+    this.processEnv['OLLAMA_MODEL'] = model
+  }
+
+  get currentModel(): string {
+    return this.ollamaModel
   }
 
   abstract isAvailable(): Promise<boolean>

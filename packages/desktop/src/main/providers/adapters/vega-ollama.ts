@@ -1,7 +1,7 @@
 import { BaseAdapter } from './base'
 import { ProviderConfig } from '../types'
 
-export class ClaudeOllamaAdapter extends BaseAdapter {
+export class VegaOllamaAdapter extends BaseAdapter {
   constructor(config: ProviderConfig, env: Record<string, string | undefined> = {}) {
     super(config, env)
   }

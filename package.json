@@ -8,5 +8,8 @@
     "build": "pnpm --filter @eburon/desktop build",
     "package": "pnpm --filter @eburon/desktop package"
   },
-  "packageManager": "pnpm@10.33.0"
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "electron": "^33.4.11"
+  }
 }

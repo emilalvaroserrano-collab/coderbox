@@ -50,7 +50,7 @@ export default function SettingsView() {
                 <SettingRow label="Default Project Directory" hint="Base root path for Eburon code indexing">
                   <input
                     className="bg-codebox-input border border-codebox-border text-codebox-primary px-2.5 py-[7px] rounded-md outline-none text-xs w-[180px] font-mono transition-colors focus:border-codebox-secondary"
-                    defaultValue="~/Projects/codebox"
+                    defaultValue="~/Projects/code-box"
                     readOnly
                   />
                 </SettingRow>
@@ -59,7 +59,7 @@ export default function SettingsView() {
                   <ToggleSwitch defaultChecked />
                 </SettingRow>
 
-                <SettingRow label="Collect Anonymous Telemetry" hint="Help improve Eburon Codebox">
+                <SettingRow label="Collect Anonymous Telemetry" hint="Help improve Eburon CodeBox">
                   <ToggleSwitch defaultChecked />
                 </SettingRow>
 

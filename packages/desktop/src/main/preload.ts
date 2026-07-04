@@ -67,6 +67,10 @@ const google = {
 contextBridge.exposeInMainWorld('electronAPI', {
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
   openFile: () => ipcRenderer.invoke('dialog:openFile'),
+  readFile: (filePath: string, maxBytes?: number): Promise<{ path: string; size?: number; content?: string; truncated?: boolean; error?: string }> =>
+    ipcRenderer.invoke('file:read', filePath, maxBytes),
+  listDir: (dirPath: string, maxEntries?: number): Promise<{ path: string; entries?: Array<{ name: string; type: string; path: string; size?: number }>; error?: string }> =>
+    ipcRenderer.invoke('file:listDir', dirPath, maxEntries),
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
 
   google,
@@ -135,5 +139,46 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('provider:streamError', handler)
       return () => ipcRenderer.removeListener('provider:streamError', handler)
     },
+  },
+
+  // Admin-only API — never exposed to normal users, only accessed via /admin/providers
+  admin: {
+    getProviderStatus: (): Promise<Array<{
+      alias: string
+      internalRoute: string
+      model: string
+      displayName: string
+      contextLimit: number
+      available: boolean
+      timeout: number
+    }>> => ipcRenderer.invoke('provider:admin:getStatus'),
+    getSwitchHistory: (): Promise<SwitchLogEntry[]> =>
+      ipcRenderer.invoke('provider:admin:getSwitchHistory'),
+    getRequestLog: (): Promise<Array<{
+      requestId: string
+      alias: string
+      internalName: string
+      internalModel?: string
+      latencyMs: number
+      success: boolean
+      error?: string
+      timestamp: number
+    }>> => ipcRenderer.invoke('provider:admin:getRequestLog'),
+    testRoute: (alias: string): Promise<{ success: boolean; latency?: number; content?: string; error?: string }> =>
+      ipcRenderer.invoke('provider:admin:testRoute', alias),
+
+    // Agent Orchestrator
+    getAgentStatus: (): Promise<Array<{
+      id: string
+      pid: number | null
+      status: string
+      restartCount: number
+      lastHealthCheck: number
+      lastError?: string
+      startedAt: number | null
+      uptime: number
+    }>> => ipcRenderer.invoke('orchestrator:getStatus'),
+    restartAgent: (agentId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('orchestrator:restart', agentId),
   },
 })

@@ -38,6 +38,7 @@ export class FreebuffCliAdapter implements ProviderAdapter {
   readonly alias: string
   readonly displayName: string
   readonly contextLimit: number
+  readonly availableModels: string[]
   protected config: ProviderConfig
   protected processEnv: Record<string, string>
   protected model: string
@@ -51,9 +52,21 @@ export class FreebuffCliAdapter implements ProviderAdapter {
     this.displayName = config.displayName
     this.contextLimit = config.contextLimit
     this.processEnv = mergeProviderEnv(config, processEnv)
-    this.model = this.processEnv['FREEBUFF_MODEL'] || 'deepseek/deepseek-v4-flash'
+    this.model = this.processEnv['FREEBUFF_MODEL'] || config.models[0] || 'deepseek/deepseek-v4-flash'
     this.baseUrl = this.processEnv['FREEBUFF_HOST'] || DEFAULT_FREEBUFF_HOST
     this.apiKey = this.processEnv['FREEBUFF_API_KEY'] || 'not-needed'
+    this.availableModels = config.models || [this.model]
+  }
+
+  /** Swap to a different model on this same Freebuff provider */
+  setModel(model: string): void {
+    SafeLogger.internal('info', `[${this.internalName}] Swapping model: ${this.model} -> ${model}`)
+    this.model = model
+    this.processEnv['FREEBUFF_MODEL'] = model
+  }
+
+  get currentModel(): string {
+    return this.model
   }
 
   async isAvailable(): Promise<boolean> {

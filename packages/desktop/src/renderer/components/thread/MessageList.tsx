@@ -69,7 +69,7 @@ export function MessageList() {
             {msg.role === 'assistant' && (
               <div className="flex items-center gap-2 text-xs text-codebox-secondary font-medium">
                 <Box size={14} className="text-codebox-purple" strokeWidth={1.8} />
-                <span>Eburon Codebox</span>
+                <span>Eburon CodeBox</span>
                 {isStreamingLast && <Loader2 size={12} className="animate-spin text-codebox-purple" />}
               </div>
             )}

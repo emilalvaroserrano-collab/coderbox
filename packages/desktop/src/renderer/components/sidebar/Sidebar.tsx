@@ -17,7 +17,7 @@ export default function Sidebar() {
   ]
 
   return (
-    <aside className={`w-[260px] bg-codebox-sidebar border-r border-codebox-border flex flex-col z-10 transition-[width,opacity] duration-250 ${!isSidebarOpen ? 'sidebar-collapsed' : ''}`}>
+      <aside className={`fixed left-0 top-0 h-screen w-[260px] bg-codebox-sidebar border-r border-codebox-border flex flex-col z-10 transition-transform duration-250 ${!isSidebarOpen ? '-translate-x-full' : 'translate-x-0'}`}>
       <div className="p-4 flex flex-col gap-4">
         {/* Window controls */}
         <div className="flex gap-2 items-center pb-1">
@@ -53,7 +53,7 @@ export default function Sidebar() {
         </span>
         <div className="flex items-center gap-2 px-1.5 py-1.5 text-codebox-primary font-medium rounded-md text-[13px]">
           <Folder size={15} className="text-codebox-secondary" />
-          <span>Codebox Workspace</span>
+          <span>CodeBox Workspace</span>
         </div>
         <div className="flex flex-col gap-0.5 pl-2">
           {threads.length === 0 ? (
